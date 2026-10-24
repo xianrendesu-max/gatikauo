@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QRコード紹介リーダー</title>
+  <!-- QRコード解析用ライブラリ (jsQR) -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f4f7f6;
+      color: #333;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      max-width: 480px;
+      width: 100%;
+      padding: 24px;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 20px;
+      color: #2c3e50;
+    }
+
+    .scanner-section {
+      position: relative;
+      width: 100%;
+      height: 280px;
+      background-color: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .loading-overlay {
+      position: absolute;
+      color: #fff;
+      font-size: 0.9rem;
+      background-color: rgba(0, 0, 0, 0.6);
+      padding: 8px 16px;
+      border-radius: 20px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.2s, opacity 0.2s;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn.primary {
+      background-color: #3498db;
+      color: #fff;
+    }
+
+    .btn.primary:hover:not(:disabled) {
+      background-color: #2980b9;
+    }
+
+    .btn.secondary {
+      background-color: #e74c3c;
+      color: #fff;
+    }
+
+    .btn.secondary:hover:not(:disabled) {
+      background-color: #c0392b;
+    }
+
+    .result-card {
+      border-top: 2px solid #ecf0f1;
+      padding-top: 20px;
+      text-align: left;
+    }
+
+    .result-card h2 {
+      font-size: 1.25rem;
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+
+    .result-card p {
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: #555;
+      margin-bottom: 15px;
+      white-space: pre-wrap;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>QRコード紹介リーダー</h1>
+    
+    <div class="scanner-section">
+      <!-- カメラ映像表示領域 -->
+      <video id="video" playsinline></video>
+      <div id="loading" class="loading-overlay">カメラを起動中...</div>
+    </div>
+
+    <div class="controls">
+      <button id="start-btn" class="btn primary">カメラを起動</button>
+      <button id="stop-btn" class="btn secondary" disabled>カメラを停止</button>
+    </div>
+
+    <div id="result-card" class="result-card hidden">
+      <h2 id="result-title">タイトル</h2>
+      <p id="result-description">ここに紹介文が表示されます。</p>
+      <button id="scan-again-btn" class="btn primary">もう一度読み取る</button>
+    </div>
+  </div>
+
+  <script>
+    // 特定のQRコードID（または文字列）に対応する紹介文データ
+    const infoData = {
+      "ITEM_001": {
+        title: "商品A：オーガニックコーヒー豆",
+        description: "エチオピア産の高品質アラビカ種100%を使用。フルーティな香りと爽やかな酸味が特徴の特別ブレンドです。"
+      },
+      "ITEM_002": {
+        title: "施設B：中央図書館のご案内",
+        description: "開館時間：9:00 - 20:00\n休館日：毎週月曜日\n館内では無料Wi-Fiをご利用いただけます。"
+      },
+      "ITEM_003": {
+        title: "イベントC：秋のアートフェスティバル",
+        description: "地元のアーティストによる作品展示や各種ワークショップを開催中！開催期間は10月31日まで。"
+      }
+    };
+
+    const video = document.getElementById("video");
+    const loading = document.getElementById("loading");
+    const startBtn = document.getElementById("start-btn");
+    const stopBtn = document.getElementById("stop-btn");
+    const resultCard = document.getElementById("result-card");
+    const resultTitle = document.getElementById("result-title");
+    const resultDescription = document.getElementById("result-description");
+    const scanAgainBtn = document.getElementById("scan-again-btn");
+
+    // バックグラウンドで映像フレームを解析するための非表示Canvas
+    const hiddenCanvas = document.createElement("canvas");
+    const hiddenContext = hiddenCanvas.getContext("2d");
+
+    let stream = null;
+    let isScanning = false;
+    let animationFrameId = null;
+
+    // カメラ開始処理
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+        video.srcObject = stream;
+        video.setAttribute("playsinline", true);
+        await video.play();
+
+        isScanning = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        loading.classList.add("hidden");
+        resultCard.classList.add("hidden");
+
+        requestAnimationFrame(tick);
+      } catch (err) {
+        console.error("カメラへのアクセスに失敗しました:", err);
+        alert("カメラの起動に失敗しました。アクセス権限を確認してください。");
+      }
+    }
+
+    // カメラ停止処理
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      isScanning = false;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      loading.classList.remove("hidden");
+    }
+
+    // フレーム解析ルーティン
+    function tick() {
+      if (!isScanning) return;
+
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        hiddenCanvas.height = video.videoHeight;
+        hiddenCanvas.width = video.videoWidth;
+
+        hiddenContext.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+        const imageData = hiddenContext.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+        
+        // QRコードの解析
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert"
+        });
+
+        if (code) {
+          handleScannedData(code.data);
+          return; // 検出できたらスキャンを停止
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(tick);
+    }
+
+    // 読み取ったQRコードデータの処理
+    function handleScannedData(data) {
+      stopCamera();
+
+      if (infoData[data]) {
+        // 登録されている特定コードの場合
+        const info = infoData[data];
+        resultTitle.textContent = info.title;
+        resultDescription.textContent = info.description;
+      } else {
+        // 未登録データまたは一般的なテキスト/URLの場合
+        resultTitle.textContent = "未登録のQRコード";
+        resultDescription.textContent = `読み取ったデータ:\n${data}\n\nこのコードに対応する紹介文は登録されていません。`;
+      }
+
+      resultCard.classList.remove("hidden");
+    }
+
+    // イベントリスナーの登録
+    startBtn.addEventListener("click", startCamera);
+    stopBtn.addEventListener("click", stopCamera);
+    scanAgainBtn.addEventListener("click", () => {
+      resultCard.classList.add("hidden");
+      startCamera();
+    });
+  </script>
+</body>
+</html>
