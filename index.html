@@ -2,56 +2,82 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QRコード紹介リーダー</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>QR Reader</title>
   <!-- QRコード解析用ライブラリ (jsQR) -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   
   <style>
+    :root {
+      --bg: #09090b;
+      --surface: #18181b;
+      --surface-border: #27272a;
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --accent: #fafafa;
+      --accent-text: #09090b;
+    }
+
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      -webkit-tap-highlight-color: transparent;
     }
 
     body {
-      font-family: 'Helvetica Neue', Arial, sans-serif;
-      background-color: #f4f7f6;
-      color: #333;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-primary);
+      min-height: 100vh;
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 100vh;
-      padding: 20px;
+      overflow: hidden;
     }
 
-    .container {
-      background-color: #ffffff;
-      border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-      max-width: 480px;
+    /* スマホ専用コンテナ */
+    .mobile-container {
       width: 100%;
-      padding: 24px;
-      text-align: center;
+      max-width: 414px;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 32px 20px;
+      position: relative;
     }
 
-    h1 {
-      font-size: 1.5rem;
-      margin-bottom: 20px;
-      color: #2c3e50;
+    /* ヘッダー */
+    header {
+      text-align: left;
+      padding-left: 4px;
     }
 
-    .scanner-section {
+    header h1 {
+      font-size: 1.2rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+    }
+
+    header p {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* カメラ表示ビューポート */
+    .scanner-viewport {
       position: relative;
       width: 100%;
-      height: 280px;
-      background-color: #000;
-      border-radius: 8px;
+      aspect-ratio: 1 / 1;
+      border-radius: 20px;
       overflow: hidden;
-      margin-bottom: 20px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      background: #000;
+      border: 1px solid var(--surface-border);
+      margin: auto 0;
     }
 
     #video {
@@ -60,117 +86,210 @@
       object-fit: cover;
     }
 
-    .loading-overlay {
+    /* クリーンなスキャンガイド（四隅のフレーム） */
+    .scan-guide {
       position: absolute;
-      color: #fff;
-      font-size: 0.9rem;
-      background-color: rgba(0, 0, 0, 0.6);
-      padding: 8px 16px;
-      border-radius: 20px;
+      inset: 0;
+      pointer-events: none;
+      border: 32px solid rgba(9, 9, 11, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
+    .corner {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border-color: rgba(255, 255, 255, 0.8);
+      border-style: solid;
+      border-width: 2px;
+    }
+    .corner-tl { top: 32px; left: 32px; border-right: none; border-bottom: none; }
+    .corner-tr { top: 32px; right: 32px; border-left: none; border-bottom: none; }
+    .corner-bl { bottom: 32px; left: 32px; border-right: none; border-top: none; }
+    .corner-br { bottom: 32px; right: 32px; border-left: none; border-top: none; }
+
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      background-color: var(--bg);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      letter-spacing: 0.05em;
+    }
+
+    /* 操作コントロール */
     .controls {
       display: flex;
       gap: 10px;
-      justify-content: center;
-      margin-bottom: 20px;
+      width: 100%;
     }
 
     .btn {
-      padding: 12px 20px;
-      border: none;
-      border-radius: 6px;
-      font-size: 1rem;
-      font-weight: bold;
+      flex: 1;
+      padding: 15px;
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 500;
       cursor: pointer;
-      transition: background-color 0.2s, opacity 0.2s;
+      transition: background-color 0.15s ease, opacity 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn:active {
+      opacity: 0.7;
     }
 
     .btn:disabled {
-      opacity: 0.5;
+      opacity: 0.3;
       cursor: not-allowed;
     }
 
-    .btn.primary {
-      background-color: #3498db;
-      color: #fff;
+    .btn-primary {
+      background-color: var(--accent);
+      color: var(--accent-text);
+      border-color: var(--accent);
     }
 
-    .btn.primary:hover:not(:disabled) {
-      background-color: #2980b9;
+    .btn-secondary {
+      background-color: var(--surface);
+      color: var(--text-primary);
     }
 
-    .btn.secondary {
-      background-color: #e74c3c;
-      color: #fff;
+    /* モーダルウィンドウ */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background-color: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
     }
 
-    .btn.secondary:hover:not(:disabled) {
-      background-color: #c0392b;
+    .modal-backdrop.active {
+      opacity: 1;
+      pointer-events: auto;
     }
 
-    .result-card {
-      border-top: 2px solid #ecf0f1;
-      padding-top: 20px;
-      text-align: left;
+    .modal-window {
+      background-color: var(--surface);
+      width: 100%;
+      max-width: 414px;
+      border-top-left-radius: 24px;
+      border-top-right-radius: 24px;
+      padding: 24px 20px 36px 20px;
+      border: 1px solid var(--surface-border);
+      border-bottom: none;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .result-card h2 {
-      font-size: 1.25rem;
-      color: #2c3e50;
-      margin-bottom: 10px;
+    .modal-backdrop.active .modal-window {
+      transform: translateY(0);
     }
 
-    .result-card p {
-      font-size: 0.95rem;
+    .modal-handle {
+      width: 32px;
+      height: 3px;
+      background-color: var(--surface-border);
+      border-radius: 1.5px;
+      margin: 0 auto 20px auto;
+    }
+
+    .modal-header {
+      margin-bottom: 12px;
+    }
+
+    .modal-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+
+    .modal-body {
+      font-size: 0.9rem;
       line-height: 1.6;
-      color: #555;
-      margin-bottom: 15px;
+      color: var(--text-secondary);
       white-space: pre-wrap;
+      margin-bottom: 24px;
+      max-height: 40vh;
+      overflow-y: auto;
     }
 
     .hidden {
-      display: none;
+      display: none !important;
     }
   </style>
 </head>
 <body>
 
-  <div class="container">
-    <h1>QRコード紹介リーダー</h1>
-    
-    <div class="scanner-section">
-      <!-- カメラ映像表示領域 -->
+  <div class="mobile-container">
+    <header>
+      <h1>QR Scanner</h1>
+      <p>枠内にコードを合わせてください</p>
+    </header>
+
+    <!-- カメラ領域 -->
+    <div class="scanner-viewport">
       <video id="video" playsinline></video>
-      <div id="loading" class="loading-overlay">カメラを起動中...</div>
+      <div class="scan-guide">
+        <div class="corner corner-tl"></div>
+        <div class="corner corner-tr"></div>
+        <div class="corner corner-bl"></div>
+        <div class="corner corner-br"></div>
+      </div>
+      <div id="loading" class="loading-overlay">カメラ待機中</div>
     </div>
 
+    <!-- ボタン操作 -->
     <div class="controls">
-      <button id="start-btn" class="btn primary">カメラを起動</button>
-      <button id="stop-btn" class="btn secondary" disabled>カメラを停止</button>
+      <button id="start-btn" class="btn btn-primary">スキャン開始</button>
+      <button id="stop-btn" class="btn btn-secondary" disabled>停止</button>
     </div>
+  </div>
 
-    <div id="result-card" class="result-card hidden">
-      <h2 id="result-title">タイトル</h2>
-      <p id="result-description">ここに紹介文が表示されます。</p>
-      <button id="scan-again-btn" class="btn primary">もう一度読み取る</button>
+  <!-- モーダルウィンドウ -->
+  <div id="modal-backdrop" class="modal-backdrop">
+    <div class="modal-window">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <h2 id="modal-title" class="modal-title">タイトル</h2>
+      </div>
+      <div id="modal-body" class="modal-body">
+        ここに紹介文が表示されます。
+      </div>
+      <button id="close-modal-btn" class="btn btn-primary" style="width: 100%;">閉じて再スキャン</button>
     </div>
   </div>
 
   <script>
-    // 特定のQRコードID（または文字列）に対応する紹介文データ
+    // QRコードデータと紹介文のマッピング
     const infoData = {
       "ITEM_001": {
-        title: "商品A：オーガニックコーヒー豆",
-        description: "エチオピア産の高品質アラビカ種100%を使用。フルーティな香りと爽やかな酸味が特徴の特別ブレンドです。"
+        title: "オーガニックブレンドコーヒー",
+        description: "エチオピア産の高品質アラビカ種を100%使用した深煎りコーヒー。華やかな香りと上質な酸味が楽しめます。"
       },
       "ITEM_002": {
-        title: "施設B：中央図書館のご案内",
-        description: "開館時間：9:00 - 20:00\n休館日：毎週月曜日\n館内では無料Wi-Fiをご利用いただけます。"
+        title: "中央図書館 2Fコワーキング",
+        description: "【利用時間】09:00 - 21:00\n【設備】高速Wi-Fi、各席コンセント完備、静音ブースあり。"
       },
       "ITEM_003": {
-        title: "イベントC：秋のアートフェスティバル",
-        description: "地元のアーティストによる作品展示や各種ワークショップを開催中！開催期間は10月31日まで。"
+        title: "秋のアートフェスティバル 2026",
+        description: "【会場】メインアリーナ\n【日時】10月31日 10:00〜18:00\n地元のクリエイター作品の展示販売や各種ワークショップを開催中。"
       }
     };
 
@@ -178,12 +297,12 @@
     const loading = document.getElementById("loading");
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
-    const resultCard = document.getElementById("result-card");
-    const resultTitle = document.getElementById("result-title");
-    const resultDescription = document.getElementById("result-description");
-    const scanAgainBtn = document.getElementById("scan-again-btn");
 
-    // バックグラウンドで映像フレームを解析するための非表示Canvas
+    const modalBackdrop = document.getElementById("modal-backdrop");
+    const modalTitle = document.getElementById("modal-title");
+    const modalBody = document.getElementById("modal-body");
+    const closeModalBtn = document.getElementById("close-modal-btn");
+
     const hiddenCanvas = document.createElement("canvas");
     const hiddenContext = hiddenCanvas.getContext("2d");
 
@@ -191,7 +310,6 @@
     let isScanning = false;
     let animationFrameId = null;
 
-    // カメラ開始処理
     async function startCamera() {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -205,16 +323,14 @@
         startBtn.disabled = true;
         stopBtn.disabled = false;
         loading.classList.add("hidden");
-        resultCard.classList.add("hidden");
 
         requestAnimationFrame(tick);
       } catch (err) {
-        console.error("カメラへのアクセスに失敗しました:", err);
-        alert("カメラの起動に失敗しました。アクセス権限を確認してください。");
+        console.error("カメラの起動に失敗しました:", err);
+        alert("カメラの起動に失敗しました。カメラのアクセス許可を確認してください。");
       }
     }
 
-    // カメラ停止処理
     function stopCamera() {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
@@ -229,7 +345,6 @@
       loading.classList.remove("hidden");
     }
 
-    // フレーム解析ルーティン
     function tick() {
       if (!isScanning) return;
 
@@ -240,44 +355,54 @@
         hiddenContext.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
         const imageData = hiddenContext.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
         
-        // QRコードの解析
         const code = jsQR(imageData.data, imageData.width, imageData.height, {
           inversionAttempts: "dontInvert"
         });
 
         if (code) {
           handleScannedData(code.data);
-          return; // 検出できたらスキャンを停止
+          return;
         }
       }
 
       animationFrameId = requestAnimationFrame(tick);
     }
 
-    // 読み取ったQRコードデータの処理
     function handleScannedData(data) {
       stopCamera();
 
       if (infoData[data]) {
-        // 登録されている特定コードの場合
         const info = infoData[data];
-        resultTitle.textContent = info.title;
-        resultDescription.textContent = info.description;
+        modalTitle.textContent = info.title;
+        modalBody.textContent = info.description;
       } else {
-        // 未登録データまたは一般的なテキスト/URLの場合
-        resultTitle.textContent = "未登録のQRコード";
-        resultDescription.textContent = `読み取ったデータ:\n${data}\n\nこのコードに対応する紹介文は登録されていません。`;
+        modalTitle.textContent = "未登録のQRコード";
+        modalBody.textContent = `読み取り結果:\n${data}\n\nこのコードに対応する紹介データが見つかりませんでした。`;
       }
 
-      resultCard.classList.remove("hidden");
+      openModal();
     }
 
-    // イベントリスナーの登録
+    function openModal() {
+      modalBackdrop.classList.add("active");
+    }
+
+    function closeModal() {
+      modalBackdrop.classList.remove("active");
+    }
+
     startBtn.addEventListener("click", startCamera);
     stopBtn.addEventListener("click", stopCamera);
-    scanAgainBtn.addEventListener("click", () => {
-      resultCard.classList.add("hidden");
+    closeModalBtn.addEventListener("click", () => {
+      closeModal();
       startCamera();
+    });
+
+    modalBackdrop.addEventListener("click", (e) => {
+      if (e.target === modalBackdrop) {
+        closeModal();
+        startCamera();
+      }
     });
   </script>
 </body>
