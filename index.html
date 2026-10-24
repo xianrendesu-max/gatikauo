@@ -3,19 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>QR Reader</title>
+  <title>QR Scanner</title>
   <!-- QRコード解析用ライブラリ (jsQR) -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   
   <style>
     :root {
-      --bg: #09090b;
-      --surface: #18181b;
-      --surface-border: #27272a;
-      --text-primary: #fafafa;
-      --text-secondary: #a1a1aa;
-      --accent: #fafafa;
-      --accent-text: #09090b;
+      --bg: #f5f5f7;
+      --surface: #ffffff;
+      --surface-border: #e2e2e7;
+      --text-primary: #1d1d1f;
+      --text-secondary: #86868b;
+      --accent: #1d1d1f;
+      --accent-text: #ffffff;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+      --modal-shadow: 0 -20px 40px rgba(0, 0, 0, 0.08);
     }
 
     * {
@@ -34,6 +36,12 @@
       justify-content: center;
       align-items: center;
       overflow: hidden;
+      opacity: 0;
+      animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes fadeIn {
+      to { opacity: 1; }
     }
 
     /* スマホ専用コンテナ */
@@ -45,27 +53,21 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 32px 20px;
+      padding: 36px 24px;
       position: relative;
     }
 
-    /* ヘッダー */
+    /* ミニマルなヘッダー */
     header {
-      text-align: left;
-      padding-left: 4px;
-    }
-
-    header h1 {
-      font-size: 1.2rem;
-      font-weight: 500;
-      letter-spacing: -0.01em;
-      color: var(--text-primary);
+      text-align: center;
+      padding-top: 8px;
     }
 
     header p {
-      font-size: 0.8rem;
+      font-size: 0.85rem;
+      font-weight: 400;
       color: var(--text-secondary);
-      margin-top: 2px;
+      letter-spacing: 0.02em;
     }
 
     /* カメラ表示ビューポート */
@@ -73,9 +75,10 @@
       position: relative;
       width: 100%;
       aspect-ratio: 1 / 1;
-      border-radius: 20px;
+      border-radius: 28px;
       overflow: hidden;
       background: #000;
+      box-shadow: var(--shadow);
       border: 1px solid var(--surface-border);
       margin: auto 0;
     }
@@ -86,97 +89,104 @@
       object-fit: cover;
     }
 
-    /* クリーンなスキャンガイド（四隅のフレーム） */
+    /* クリーンなスキャンガイド（四隅のシャープなフレーム） */
     .scan-guide {
       position: absolute;
       inset: 0;
       pointer-events: none;
-      border: 32px solid rgba(9, 9, 11, 0.4);
+      border: 36px solid rgba(245, 245, 247, 0.45);
       display: flex;
       align-items: center;
       justify-content: center;
+      transition: border-color 0.3s ease;
     }
 
     .corner {
       position: absolute;
-      width: 24px;
-      height: 24px;
-      border-color: rgba(255, 255, 255, 0.8);
+      width: 20px;
+      height: 20px;
+      border-color: rgba(29, 29, 31, 0.85);
       border-style: solid;
       border-width: 2px;
+      transition: transform 0.3s ease;
     }
-    .corner-tl { top: 32px; left: 32px; border-right: none; border-bottom: none; }
-    .corner-tr { top: 32px; right: 32px; border-left: none; border-bottom: none; }
-    .corner-bl { bottom: 32px; left: 32px; border-right: none; border-top: none; }
-    .corner-br { bottom: 32px; right: 32px; border-left: none; border-top: none; }
+    .corner-tl { top: 36px; left: 36px; border-right: none; border-bottom: none; }
+    .corner-tr { top: 36px; right: 36px; border-left: none; border-bottom: none; }
+    .corner-bl { bottom: 36px; left: 36px; border-right: none; border-top: none; }
+    .corner-br { bottom: 36px; right: 36px; border-left: none; border-top: none; }
 
     .loading-overlay {
       position: absolute;
       inset: 0;
-      background-color: var(--bg);
+      background-color: var(--surface);
       display: flex;
       justify-content: center;
       align-items: center;
       font-size: 0.85rem;
       color: var(--text-secondary);
       letter-spacing: 0.05em;
+      font-weight: 500;
     }
 
     /* 操作コントロール */
     .controls {
       display: flex;
-      gap: 10px;
+      gap: 12px;
       width: 100%;
+      padding-bottom: 8px;
     }
 
     .btn {
       flex: 1;
-      padding: 15px;
+      padding: 16px;
       border: 1px solid var(--surface-border);
-      border-radius: 12px;
+      border-radius: 16px;
       font-size: 0.9rem;
       font-weight: 500;
       cursor: pointer;
-      transition: background-color 0.15s ease, opacity 0.15s ease;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
     .btn:active {
-      opacity: 0.7;
+      transform: scale(0.96);
     }
 
     .btn:disabled {
-      opacity: 0.3;
+      opacity: 0.25;
       cursor: not-allowed;
+      transform: none;
     }
 
     .btn-primary {
       background-color: var(--accent);
       color: var(--accent-text);
       border-color: var(--accent);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
 
     .btn-secondary {
       background-color: var(--surface);
       color: var(--text-primary);
+      box-shadow: var(--shadow);
     }
 
-    /* モーダルウィンドウ */
+    /* モーダルウィンドウ（スプリングアニメーション付き） */
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      background-color: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      background-color: rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       display: flex;
       align-items: flex-end;
       justify-content: center;
       z-index: 100;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.25s ease;
+      transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .modal-backdrop.active {
@@ -188,13 +198,14 @@
       background-color: var(--surface);
       width: 100%;
       max-width: 414px;
-      border-top-left-radius: 24px;
-      border-top-right-radius: 24px;
-      padding: 24px 20px 36px 20px;
+      border-top-left-radius: 32px;
+      border-top-right-radius: 32px;
+      padding: 28px 24px 44px 24px;
+      box-shadow: var(--modal-shadow);
       border: 1px solid var(--surface-border);
       border-bottom: none;
       transform: translateY(100%);
-      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .modal-backdrop.active .modal-window {
@@ -202,11 +213,11 @@
     }
 
     .modal-handle {
-      width: 32px;
-      height: 3px;
-      background-color: var(--surface-border);
-      border-radius: 1.5px;
-      margin: 0 auto 20px auto;
+      width: 36px;
+      height: 4px;
+      background-color: #d1d1d6;
+      border-radius: 2px;
+      margin: 0 auto 24px auto;
     }
 
     .modal-header {
@@ -214,18 +225,18 @@
     }
 
     .modal-title {
-      font-size: 1.15rem;
+      font-size: 1.2rem;
       font-weight: 600;
       color: var(--text-primary);
       letter-spacing: -0.01em;
     }
 
     .modal-body {
-      font-size: 0.9rem;
-      line-height: 1.6;
+      font-size: 0.92rem;
+      line-height: 1.65;
       color: var(--text-secondary);
       white-space: pre-wrap;
-      margin-bottom: 24px;
+      margin-bottom: 28px;
       max-height: 40vh;
       overflow-y: auto;
     }
@@ -239,8 +250,7 @@
 
   <div class="mobile-container">
     <header>
-      <h1>QR Scanner</h1>
-      <p>枠内にコードを合わせてください</p>
+      <p>フレーム内にQRコードを合わせてください</p>
     </header>
 
     <!-- カメラ領域 -->
